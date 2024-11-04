@@ -9,16 +9,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "./ui/button";
+import { Button } from "@/components/ui/button";
 import { SubmitHandler, useForm } from "react-hook-form";
 import { FormInputProps } from "@/types";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
+import { tag } from "@prisma/client";
 
 interface FormPostProps {
   submit: SubmitHandler<FormInputProps>;
   isEdit?: boolean;
+  initialValue?: FormInputProps;
+  isLoadingSubmit: boolean;
 }
 
-const FormPost: FC<FormPostProps> = ({ submit, isEdit }) => {
+const FormPost: FC<FormPostProps> = ({
+  submit,
+  isEdit,
+  initialValue,
+  isLoadingSubmit,
+}) => {
+  console.log("Initial value", initialValue);
+
   const {
     register,
     handleSubmit,
@@ -26,25 +38,37 @@ const FormPost: FC<FormPostProps> = ({ submit, isEdit }) => {
     setError,
     clearErrors,
     formState: { errors },
-  } = useForm<FormInputProps>();
+  } = useForm<FormInputProps>({
+    defaultValues: initialValue,
+  });
+
+  const { data: dataTags, isLoading: isLoadingTags } = useQuery<tag[]>({
+    queryKey: ["tags"],
+    queryFn: async () => {
+      const response = await axios.get("/api/tags");
+      return response.data;
+    },
+  });
+
+  console.log(dataTags);
 
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const handleSelectChange = (value: string) => {
     setSelectedTag(value);
-    setValue("tag", value); // Set form value using react-hook-form's setValue
-    clearErrors("tag"); // Clear errors if a value is selected
+    setValue("tagId", value); // Set form value using react-hook-form's setValue
+    clearErrors("tagId"); // Clear errors if a value is selected
   };
 
-  const onSubmit = (data: FormInputProps) => {
+  const onSubmit: SubmitHandler<FormInputProps> = (data) => {
     if (!selectedTag) {
-      setError("tag", {
+      setError("tagId", {
         type: "required",
         message: "Tag is required",
       });
       return;
     }
-    submit(data);
+    submit({ ...data, tagId: selectedTag }); // Include selectedTag in the data submitted
   };
 
   return (
@@ -76,17 +100,32 @@ const FormPost: FC<FormPostProps> = ({ submit, isEdit }) => {
           <SelectValue placeholder="Select tags" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="javascript">Javascript</SelectItem>
-          <SelectItem value="php">PHP</SelectItem>
-          <SelectItem value="python">Python</SelectItem>
+          {isLoadingTags ? (
+            <div className="text-xs">Loading...</div>
+          ) : (
+            dataTags?.map((tag) => (
+              <SelectItem key={tag.id} value={tag.id}>
+                {" "}
+                {/* Set value to tag.id */}
+                {tag.name}
+              </SelectItem>
+            ))
+          )}
         </SelectContent>
       </Select>
-      {errors.tag && (
-        <p className="text-red-500 text-xs -mt-4">{errors.tag.message}</p>
+      {errors.tagId && (
+        <p className="text-red-500 text-xs -mt-4">{errors.tagId.message}</p>
       )}
 
       <Button type="submit" variant="outline">
-        {isEdit ? "Update Post" : "Create Post"}
+        {isLoadingSubmit && <span className="text-sm text-start">Loading...</span>}
+        {isEdit
+          ? isLoadingSubmit
+            ? "Updating..."
+            : "Update Post"
+          : isLoadingSubmit
+          ? "Creating..."
+          : "Create Post"}
       </Button>
     </form>
   );
